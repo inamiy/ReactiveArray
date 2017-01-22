@@ -9,25 +9,26 @@
 import Quick
 import Nimble
 import ReactiveArray
-import ReactiveCocoa
+import ReactiveSwift
+import Result
 
-private func waitForOperation<T>(fromProducer producer: SignalProducer<Operation<T>, NoError>,
-    when: () -> (),
-    onAppend: T -> () = { fail("Invalid operation type: .Append(\($0))") },
-    onInsert: (T, Int) -> () = { fail("Invalid operation type: .Insert(\($0), \($1))") },
-    onUpdate: (T, Int) -> () = { fail("Invalid operation type: .Update(\($0), \($1))") },
-    onDelete: Int -> () = { fail("Invalid operation type: .Delete(\($0))") }) {
+private func waitForOperation<T>(fromProducer producer: SignalProducer<ArrayOperation<T>, NoError>,
+    when: @escaping () -> (),
+    onAppend: @escaping (T) -> () = { fail("Invalid operation type: .append(\($0))") },
+    onInsert: @escaping (T, Int) -> () = { fail("Invalid operation type: .insert(\($0), \($1))") },
+    onUpdate: @escaping (T, Int) -> () = { fail("Invalid operation type: .update(\($0), \($1))") },
+    onDelete: @escaping (Int) -> () = { fail("Invalid operation type: .Delete(\($0))") }) {
         
         waitUntil(timeout: 10.0) { done in
-            producer.startWithNext { operation in
+            producer.startWithValues { operation in
                 switch operation {
-                case .Append(let value):
+                case .append(let value):
                     onAppend(value)
-                case .Insert(let value, let index):
+                case .insert(let value, let index):
                     onInsert(value, index)
-                case .Update(let value, let index):
+                case .update(let value, let index):
                     onUpdate(value, index)
-                case .RemoveElement(let index):
+                case .remove(let index):
                     onDelete(index)
                 }
                 done()
@@ -37,23 +38,23 @@ private func waitForOperation<T>(fromProducer producer: SignalProducer<Operation
         
 }
 
-private func waitForOperation<T>(fromSignal signal: Signal<Operation<T>, NoError>,
-    when: () -> (),
-    onAppend: T -> () = { fail("Invalid operation type: .Append(\($0))") },
-    onInsert: (T, Int) -> () = { fail("Invalid operation type: .Insert(\($0), \($1))") },
-    onUpdate: (T, Int) -> () = { fail("Invalid operation type: .Update(\($0), \($1))") },
-    onDelete: Int -> () = { fail("Invalid operation type: .Delete(\($0))") }) {
+private func waitForOperation<T>(fromSignal signal: Signal<ArrayOperation<T>, NoError>,
+    when: @escaping () -> (),
+    onAppend: @escaping (T) -> () = { fail("Invalid operation type: .append(\($0))") },
+    onInsert: @escaping (T, Int) -> () = { fail("Invalid operation type: .insert(\($0), \($1))") },
+    onUpdate: @escaping (T, Int) -> () = { fail("Invalid operation type: .update(\($0), \($1))") },
+    onDelete: @escaping (Int) -> () = { fail("Invalid operation type: .Delete(\($0))") }) {
         
-    let producer = SignalProducer<Operation<T>, NoError> { (observer, disposable) in signal.observe(observer) }
+    let producer = SignalProducer<ArrayOperation<T>, NoError> { (observer, disposable) in signal.observe(observer) }
     waitForOperation(fromProducer: producer, when: when, onAppend: onAppend, onInsert: onInsert, onUpdate: onUpdate, onDelete: onDelete)
 }
 
 private func waitForOperation<T>(fromArray array: ReactiveArray<T>,
-    when: () -> (),
-    onAppend: T -> () = { fail("Invalid operation type: .Append(\($0))") },
-    onInsert: (T, Int) -> () = { fail("Invalid operation type: .Insert(\($0), \($1))") },
-    onUpdate: (T, Int) -> () = { fail("Invalid operation type: .Update(\($0), \($1))") },
-    onDelete: Int -> () = { fail("Invalid operation type: .Delete(\($0))") }) {
+    when: @escaping () -> (),
+    onAppend: @escaping (T) -> () = { fail("Invalid operation type: .append(\($0))") },
+    onInsert: @escaping (T, Int) -> () = { fail("Invalid operation type: .insert(\($0), \($1))") },
+    onUpdate: @escaping (T, Int) -> () = { fail("Invalid operation type: .update(\($0), \($1))") },
+    onDelete: @escaping (Int) -> () = { fail("Invalid operation type: .Delete(\($0))") }) {
         
     waitForOperation(fromSignal: array.signal, when: when, onAppend: onAppend, onInsert: onInsert, onUpdate: onUpdate, onDelete: onDelete)
 }
@@ -103,8 +104,8 @@ class ReactiveArraySpec: QuickSpec {
             context("when there is a value at the given position") {
                 
                 it("replaces the old value with the new one") {
-                    array.insert(5, atIndex: 1)
-                    
+                    array.insert(5, at: 1)
+
                     expect(array[1]).to(equal(5))
                     expect(array.toArray()).to(equal([1,5,2,3,4]))
                 }
@@ -113,7 +114,7 @@ class ReactiveArraySpec: QuickSpec {
                     waitForOperation(
                         fromArray: array,
                         when: {
-                            array.insert(5, atIndex: 1)
+                            array.insert(5, at: 1)
                         },
                         onInsert: { (value, index) in
                             expect(value).to(equal(5))
@@ -130,7 +131,7 @@ class ReactiveArraySpec: QuickSpec {
 //
 //                it("raises an exception") {
 //                    expect {
-//                        array.insert(5, atIndex: array.count + 10)
+//                        array.insert(5, at: array.count + 10)
 //                    }.to(raiseException(named: "NSInternalInconsistencyException"))
 //                }
 //
@@ -141,7 +142,7 @@ class ReactiveArraySpec: QuickSpec {
         describe("#removeAtIndex") {
             
             it("removes the element at the given position") {
-                array.removeAtIndex(1)
+                array.remove(at: 1)
                 
                 expect(array.toArray()).to(equal([1,3,4]))
             }
@@ -150,7 +151,7 @@ class ReactiveArraySpec: QuickSpec {
                 waitForOperation(
                     fromArray: array,
                     when: {
-                        array.removeAtIndex(1)
+                        array.remove(at: 1)
                     },
                     onDelete: { index in
                         expect(index).to(equal(1))
@@ -248,7 +249,7 @@ class ReactiveArraySpec: QuickSpec {
                     waitForOperation(
                         fromArray: mirror,
                         when: {
-                            array.removeAtIndex(1)
+                            array.remove(at: 1)
                         },
                         onDelete: { index in
                             expect(index).to(equal(1))
@@ -267,10 +268,10 @@ class ReactiveArraySpec: QuickSpec {
                 it("signals an append operation for each stored element") {
                     waitUntil { done in
                         array.producer
-                            .take(array.count)
+                            .take(first: array.count)
                             .collect()
-                            .startWithNext { operations in
-                                let expectedOperations: [Operation<Int>] = array.map { Operation.Append(value: $0) }
+                            .startWithValues { operations in
+                                let expectedOperations: [ArrayOperation<Int>] = array.map { .append(value: $0) }
                                 let result = operations == expectedOperations
                                 expect(result).to(beTrue())
                                 done()
@@ -304,9 +305,9 @@ class ReactiveArraySpec: QuickSpec {
                     let a = ReactiveArray<Int>(elements: [1])
                     
                     waitForOperation(
-                        fromProducer: a.producer.skip(1), // Skips the operation triggered due to the array not being empty
+                        fromProducer: a.producer.skip(first: 1), // Skips the operation triggered due to the array not being empty
                         when: {
-                            a.insert(5, atIndex: 0)
+                            a.insert(5, at: 0)
                         },
                         onInsert: { (value, index) in
                             expect(value).to(equal(5))
@@ -323,9 +324,9 @@ class ReactiveArraySpec: QuickSpec {
                     let a = ReactiveArray<Int>(elements: [1])
                     
                     waitForOperation(
-                        fromProducer: a.producer.skip(1), // Skips the operation triggered due to the array not being empty
+                        fromProducer: a.producer.skip(first: 1), // Skips the operation triggered due to the array not being empty
                         when: {
-                            a.removeAtIndex(0)
+                            a.remove(at: 0)
                         },
                         onDelete: { index in
                             expect(index).to(equal(0))
@@ -345,7 +346,7 @@ class ReactiveArraySpec: QuickSpec {
                     waitForOperation(
                         fromSignal: array.signal,
                         when: {
-                            array.insert(5, atIndex: 1)
+                            array.insert(5, at: 1)
                         },
                         onInsert: { (value, index) in
                             expect(value).to(equal(5))
@@ -395,7 +396,7 @@ class ReactiveArraySpec: QuickSpec {
                     waitForOperation(
                         fromSignal: array.signal,
                         when: {
-                            array.removeAtIndex(1)
+                            array.remove(at: 1)
                         },
                         onDelete: { index in
                             expect(index).to(equal(1))
@@ -418,7 +419,7 @@ class ReactiveArraySpec: QuickSpec {
             }
             
             it("returns the initial amount of elements in the array") {
-                producer.startWithNext { count in
+                producer.startWithValues { count in
                     expect(count).to(equal(countBeforeOperation))
                 }
             }
@@ -426,20 +427,20 @@ class ReactiveArraySpec: QuickSpec {
             context("when an insert operation is executed") {
                 
                 beforeEach {
-                    producer = producer.skip(1)
+                    producer = producer.skip(first: 1)
                 }
                 
                 it("updates the count") {
                     waitUntil { done in
                         producer
-                            .take(2)
+                            .take(first: 2)
                             .collect()
-                            .startWithNext { counts in
+                            .startWithValues { counts in
                                 expect(counts).to(equal([countBeforeOperation + 1, countBeforeOperation + 2]))
                                 done()
                             }
                         
-                        array.insert(657, atIndex: 1)
+                        array.insert(657, at: 1)
                         array.append(656)
                     }
                 }
@@ -449,7 +450,7 @@ class ReactiveArraySpec: QuickSpec {
             context("when an update operation is executed") {
                 
                 beforeEach {
-                    producer = producer.skip(1)
+                    producer = producer.skip(first: 1)
                 }
                 
                 it("does not update the count") {
@@ -465,12 +466,12 @@ class ReactiveArraySpec: QuickSpec {
             context("when an append operation is executed") {
                 
                 beforeEach {
-                    producer = producer.skip(1)
+                    producer = producer.skip(first: 1)
                 }
                 
                 it("updates the count") {
                     waitUntil { done in
-                        producer.startWithNext { count in
+                        producer.startWithValues { count in
                             expect(count).to(equal(countBeforeOperation + 1))
                             done()
                         }
@@ -484,17 +485,17 @@ class ReactiveArraySpec: QuickSpec {
             context("when a delete operation is executed") {
                 
                 beforeEach {
-                    producer = producer.skip(1)
+                    producer = producer.skip(first: 1)
                 }
                 
                 it("updates the count") {
                     waitUntil { done in
-                        producer.startWithNext { count in
+                        producer.startWithValues { count in
                             expect(count).to(equal(countBeforeOperation - 1))
                             done()
                         }
                         
-                        array.removeAtIndex(1)
+                        array.remove(at: 1)
                     }
                 }
                 
